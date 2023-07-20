@@ -1,0 +1,236 @@
+#include "stm32f4xx.h"
+#include "delay.h"
+#include "usart.h"
+#include "diancitie.h" 
+#include "ds18b20.h" 
+#include "chaoshengbo.h" 
+#include "juzhenjianpan.h" 
+#include "oled.h" 
+#include "zhendongchaunganqi.h" 
+#include "led.h" 
+#include "Motor.h"
+#include "pwm.h" 
+#include "timer.h" 
+#include "stmflash.h"
+#include "mpu6050.h"
+#include "inv_mpu.h"
+#include "inv_mpu_dmp_motion_driver.h" 
+extern u16 TIM2_Flag;
+extern float temp;//温度
+extern void uart_init(u32 bound);
+
+#define DATA_LENGTH (sizeof(DATA_Buffer) / sizeof(u32))  // 数组长度
+#define SIZE (DATA_LENGTH * sizeof(u32) / sizeof(u32)) // 计算需要的存储空间大小，单位为字节
+
+#define FLASH_SAVE_ADDR  0X0800C004 	// 设置FLASH 保存地址(必须为偶数，且所在扇区,要大于本代码所占用到的扇区.
+										// 否则,写操作的时候,可能会导致擦除整个扇区,从而引起部分程序丢失.引起死机.
+										
+
+int main(void)
+{
+	//epprom
+	u16 datatemp[2];
+	//OLED
+	u16 n=0;//大小
+	u16 m=1;//单位
+	u16 width=0;
+	u8 mode=6;
+	//按钮
+	u8 key;
+	u8 just=0;
+	//继电器
+	relay_init();
+	//LED初始化
+	LED_Init();
+	//系统延时初始化
+	delay_init(168);
+	//初始化串口115200
+	uart_init(115200);
+	//oled初始化
+	OLED_Init();
+	//初始化MPU6050
+	MPU_Init();					
+	mpu_dmp_init();
+	//矩阵键盘
+	key_init_44();
+	//电机初始化
+	MOTOR_Init();
+	//pwm初始化
+	TIM10_PWM_Init(500-1,84-1);	//C使能端 左前 TIM10 Motor3pwmval
+	TIM14_PWM_Init(500-1,84-1);	//C使能端 右前 TIM14 Motor4pwmval
+	
+	TIM13_PWM_Init(500-1,84-1);	//A使能端 左后 TIM13 Motor1pwmval
+	TIM9_PWM_Init(500-1,84-1);	//C使能端 右后 TIM9 	Motor5pwmval
+	
+	TIM11_PWM_Init(500-1,84-1);	//B使能端 风扇 TIM11 Motor2pwmval
+
+	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);  // 设置系统中断优先级分组2
+	
+	OLED_Clear();//清屏
+	OLED_ShowString(10,0,"First user",16);
+	OLED_ShowString(0,16,"Entering debug mode",16);  //显示字符串
+	OLED_Refresh_Gram();//更新OLED
+	delay_ms(2000);
+	OLED_Clear();//清屏
+	OLED_ShowString(3,16,"Welcome",16);  //显示字符串
+	OLED_Refresh_Gram();//更新OLED
+	
+	tingzhi();
+	while(1)
+	{
+//		relay_on();
+//		relay_on();
+//		delay_ms(1500);
+//  	relay_off();
+//  	delay_ms(1500);
+		key=key_init_44();
+		if(key)
+		{
+			just=key;
+		}
+		switch(mode)
+		{//1:加法模式 2：减法模式 3;运行模式
+			case 1:
+				OLED_Clear();//清屏
+				OLED_ShowString(1,0,"Enter a length: ",16);
+				OLED_ShowNum(15,26,n,3,16);
+				OLED_ShowString(40,26,"cm (mode:+)",16);
+				OLED_Refresh_Gram();//更新OLED
+				delay_ms(150);
+					switch(just)
+				{
+				case 0:just=0;break;
+				case 1:n=n+1*m;just=0;printf("%d",n);break;
+				case 2:n=n+2*m;just=0;printf("%d",n);break;
+				case 3:n=n+3*m;just=0;printf("%d",n);break;
+				case 4:n=n+4*m;just=0;printf("%d",n);break;
+				case 5:n=n+5*m;just=0;printf("%d",n);break;
+				case 6:n=n+6*m;just=0;printf("%d",n);break;
+				case 7:n=n+7*m;just=0;printf("%d",n);break;
+				case 8:n=n+8*m;just=0;printf("%d",n);break;
+				case 9:n=n+9*m;just=0;printf("%d",n);break;
+				case 10:m=m*10;if(m==1000)m=1;just=0;printf("%d",n);break;//切换单位cm-dm-m-cm
+				case 11:mode=2;just=0;m=1;printf("%d",n);break;//进入减法模式
+				case 12:mode=3;just=0;m=1;printf("%d",n);break;//确认
+				}
+				break;
+							
+			case 2:
+			
+				OLED_Clear();//清屏
+				OLED_ShowString(1,0,"Enter a length: ",16);
+				OLED_ShowNum(15,26,n,3,16);
+				OLED_ShowString(40,26,"cm (mode:-)",16);
+				OLED_Refresh_Gram();//更新OLED
+				delay_ms(150);
+					switch(just)
+				{
+				case 0:just=0;break;
+				case 1:n=n-1*m;just=0;printf("%d",n);break;
+				case 2:n=n-2*m;just=0;printf("%d",n);break;
+				case 3:n=n-3*m;just=0;printf("%d",n);break;
+				case 4:n=n-4*m;just=0;printf("%d",n);break;
+				case 5:n=n-5*m;just=0;printf("%d",n);break;
+				case 6:n=n-6*m;just=0;printf("%d",n);break;
+				case 7:n=n-7*m;just=0;printf("%d",n);break;
+				case 8:n=n-8*m;just=0;printf("%d",n);break;
+				case 9:n=n-9*m;just=0;printf("%d",n);break;
+				case 10:m=m*10;if(m==1000)m=1;just=0;printf("%d",n);break;//切换单位cm-dm-m-cm
+				case 11:mode=1;just=0;printf("%d",n);m=1;break;//进入加法模式
+				case 12:mode=3;just=0;printf("%d",n);m=1;break;//确认
+				}
+				break;
+				
+			case 3:
+				OLED_Clear();//清屏
+				OLED_ShowString(1,0,"Enter a width: ",16);
+				OLED_ShowNum(15,26,width,3,16);
+				OLED_ShowString(40,26,"cm (mode:+)",16);
+				OLED_Refresh_Gram();//更新OLED
+				delay_ms(150);
+					switch(just)
+				{
+				case 0:just=0;break;
+				case 1:width=width+1*m;just=0;printf("%d",width);break;
+				case 2:width=width+2*m;just=0;printf("%d",width);break;
+				case 3:width=width+3*m;just=0;printf("%d",width);break;
+				case 4:width=width+4*m;just=0;printf("%d",width);break;
+				case 5:width=width+5*m;just=0;printf("%d",width);break;
+				case 6:width=width+6*m;just=0;printf("%d",width);break;
+				case 7:width=width+7*m;just=0;printf("%d",width);break;
+				case 8:width=width+8*m;just=0;printf("%d",width);break;
+				case 9:width=width+9*m;just=0;printf("%d",width);break;
+				case 10:m=m*10;if(m==1000)m=1;just=0;printf("%d",width);break;//切换单位cm-dm-m-cm
+				case 11:mode=4;just=0;m=1;printf("%d",width);break;//进入减法模式
+				case 12:mode=5;just=0;m=1;printf("%d",width);break;//确认
+				}
+				break;
+			case 4:
+				OLED_Clear();//清屏
+				OLED_ShowString(1,0,"Enter a width: ",16);
+				OLED_ShowNum(15,26,width,3,16);
+				OLED_ShowString(40,26,"cm (mode:-)",16);
+				OLED_Refresh_Gram();//更新OLED
+				delay_ms(150);
+					switch(just)
+				{
+				case 0:just=0;break;
+				case 1:width=width-1*m;just=0;printf("%d",n);break;
+				case 2:width=width-2*m;just=0;printf("%d",n);break;
+				case 3:width=width-3*m;just=0;printf("%d",n);break;
+				case 4:width=width-4*m;just=0;printf("%d",n);break;
+				case 5:width=width-5*m;just=0;printf("%d",n);break;
+				case 6:width=width-6*m;just=0;printf("%d",n);break;
+				case 7:width=width-7*m;just=0;printf("%d",n);break;
+				case 8:width=width-8*m;just=0;printf("%d",n);break;
+				case 9:width=width-9*m;just=0;printf("%d",n);break;
+				case 10:m=m*10;if(m==1000)m=1;just=0;printf("%d",width);break;//切换单位cm-dm-m-cm
+				case 11:mode=3;just=0;printf("%d",width);m=1;break;//进入加法模式
+				case 12:mode=5;just=0;printf("%d",width);m=1;break;//确认
+				}
+				break;
+			case 5:
+				n=datatemp[0];
+				width=datatemp[1];	
+				OLED_Clear();//清屏
+				OLED_ShowString(1,0,"Stored in data ",16);
+				OLED_Refresh_Gram();//更新OLED
+				delay_ms(1500);				
+				STMFLASH_Write(FLASH_SAVE_ADDR, (u32*)datatemp, 4);
+				
+				OLED_Clear();//清屏
+				OLED_ShowString(1,0,"Storage complete",16);
+				OLED_Refresh_Gram();//更新OLED		
+				delay_ms(1500);
+				
+				OLED_Clear();//清屏
+				OLED_ShowString(1,0,"Enter the run mode",16);
+				OLED_ShowString(36,16,"Welcome",16);  //显示字符串
+				OLED_Refresh_Gram();//更新OLED
+				delay_ms(3000);
+				mode=6;
+				break;
+			case 6:
+				OLED_Clear();//清屏
+				OLED_ShowString(1,0,"Enter running ",16);
+				OLED_Refresh_Gram();//更新OLED
+				delay_ms(150);
+				switch(just)
+				{
+				case 0:just=0;break;
+				case 1:qianjin();delay_ms(5000);tingzhi();just=0;break;
+				case 2:daotui();delay_ms(5000);tingzhi();just=0;break;
+				case 3:zuoyi();delay_ms(5000);tingzhi();just=0;break;
+				case 4:youyi();delay_ms(5000);tingzhi();just=0;break;
+				
+				}
+				break;			
+			case 7:break;
+				
+		}			
+	}
+
+}
+	
+
+
